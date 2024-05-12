@@ -19,7 +19,7 @@ def allocate_portfolio(investment, strategies):
         'Growth Investing': ['AMZN', 'TSLA', 'NVDA'],
         'Index Investing': ['VTI', 'IXUS', 'ILTB'],
         'Quality Investing': ['JNJ', 'PG', 'DIS'],
-        'Value Investing': ['BRK.B', 'JPM', 'WMT']
+        'Value Investing': ['IBM', 'JPM', 'WMT']
     }
     assets = []
     for strategy in strategies:
