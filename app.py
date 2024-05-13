@@ -2,15 +2,19 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 
-# Fetching real-time data from Yahoo Finance
+# Fetching historical data from Yahoo Finance
+
+# Fetching historical data from Yahoo Finance
 def fetch_data(ticker):
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period="1d")
-        return hist['Close'].iloc[-1]  # Gets the latest closing price
+        hist = stock.history(period="6d")
+        # Ensure the index is tz-naive
+        return hist['Close'].tz_localize(None)
     except Exception as e:
         st.error(f"Error fetching data for {ticker}: {e}")
-        return None
+        # Ensure consistent index by using tz-naive
+        return pd.Series([None]*6, index=pd.date_range(end=pd.Timestamp.today(), periods=6, freq='D', tz=None))
 
 # Portfolio allocation logic
 def allocate_portfolio(investment, strategies):
@@ -27,13 +31,20 @@ def allocate_portfolio(investment, strategies):
     num_assets = len(assets)
     investment_per_asset = investment / num_assets
     portfolio = {}
+    historical_data = pd.DataFrame()
+    total_portfolio_value = pd.Series(0, index=pd.date_range(end=pd.Timestamp.today(), periods=6, freq='D', tz=None))
+
     for asset in assets:
-        current_price = fetch_data(asset)
-        if current_price is not None:
+        closing_prices = fetch_data(asset)
+        if closing_prices is not None and not closing_prices.isnull().all():
+            current_price = closing_prices.dropna().iloc[-1]
             shares = investment_per_asset / current_price
             portfolio[asset] = {'Investment': investment_per_asset, 'Current Price': current_price, 'Shares': shares}
-    return portfolio
+            historical_values = closing_prices * shares
+            historical_data[asset] = historical_values
+            total_portfolio_value = total_portfolio_value.add(historical_values, fill_value=0)
 
+    return portfolio, historical_data, total_portfolio_value.iloc[-5:] 
 # Main page layout
 def main():
     st.title('Stock Portfolio Suggestion Engine')
@@ -44,23 +55,31 @@ def main():
         format_func=lambda x: f"{x} - Click for details"
     )
 
+    if len(strategies) > 2:
+        st.error('Please select no more than two strategies.')
+        strategies = strategies[:2]  # Limit to two strategies
+
     if strategies:
-        st.write("Information on selected strategies:")
+        st.write("Information on the first two selected strategies:")
         for strategy in strategies:
             if strategy == 'Ethical Investing':
                 st.info("Ethical Investing focuses on companies that demonstrate ethical practices.")
-            # Add more detailed descriptions for each strategy here...
 
     if st.button('Generate Portfolio'):
         if not strategies:
             st.error("Please select at least one strategy.")
         else:
-            portfolio = allocate_portfolio(investment, strategies)
+            portfolio, historical_data, total_portfolio_value = allocate_portfolio(investment, strategies)
             st.write("Your portfolio:", portfolio)
 
-            # Optional: Store and display historical values
-            df = pd.DataFrame(list(portfolio.values()))
-            st.line_chart(df['Current Price'])
+            # Display historical values for all assets in a single chart
+            st.write("Historical prices for selected assets (last 5 days):")
+            st.line_chart(historical_data)
+
+            # Display the total portfolio value over the last 5 days
+            st.write("Total portfolio value over the last 5 days:")
+            print(total_portfolio_value)
+            st.line_chart(total_portfolio_value)
 
 if __name__ == "__main__":
     main()
